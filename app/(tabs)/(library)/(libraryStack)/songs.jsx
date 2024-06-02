@@ -4,19 +4,23 @@ import {
   SafeAreaView,
   TouchableOpacity,
   FlatList,
-  Image,
+  ActivityIndicator,
 } from "react-native";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { useRouter, Link, useNavigation } from "expo-router";
+import { useRouter, useNavigation } from "expo-router";
 import {
   Ionicons,
   MaterialCommunityIcons,
   FontAwesome,
-  SimpleLineIcons,
 } from "@expo/vector-icons";
 import { songs as Songs } from "../../../../constants";
 import filter from "../../../../utils/filterSongs";
-import TrackPlayer from "react-native-track-player";
+import TrackPlayer, {
+  useTrackPlayerEvents,
+  Event,
+  State,
+} from "react-native-track-player";
+import PlaylistItem from "../../../../components/PlaylistItem";
 
 // function SongsHeader() {
 
@@ -38,15 +42,33 @@ import TrackPlayer from "react-native-track-player";
 
 export default function songs() {
   const [search, setsearch] = useState("");
-  const [filteredSongs, setfilteredSongs] = useState(Songs);
+  const [queue, setQueue] = useState(Songs);
+  const [currentTrack, setCurrentTrack] = useState(0);
 
   const navigation = useNavigation();
   const router = useRouter();
 
+  async function loadPlaylist() {
+    const queue = await TrackPlayer.getQueue();
+    setQueue(queue);
+  }
+
+  useEffect(() => {
+    loadPlaylist();
+  }, []);
+
   function handleTypingSearch({ nativeEvent: { text } }) {
     setsearch(text);
-    setfilteredSongs(filter(Songs, text));
+    setQueue(filter(queue, text));
   }
+
+  useTrackPlayerEvents([Event.PlaybackTrackChanged], async (event) => {
+    if (event.state == State.nextTrack) {
+      let index = await TrackPlayer.getCurrentTrack();
+      setCurrentTrack(index);
+    }
+  });
+
 
   useEffect(() => {
     navigation.setOptions({
@@ -80,25 +102,6 @@ export default function songs() {
     });
   }, [navigation]);
 
-  //Loading up the tracks
-  useEffect(() => {
-    async function loadSongs() {
-      try{
-        await TrackPlayer.setupPlayer();
-        await TrackPlayer.add(Songs);
-        const tracks = await TrackPlayer.getQueue();
-        return tracks;
-      }
-      catch(error){
-        console.log(error)
-      }
-      
-    }
-    
-    loadSongs();
-    
-  }, [Songs]);
-
   useLayoutEffect(() => {
     navigation.setOptions({
       headerSearchBarOptions: {
@@ -113,31 +116,16 @@ export default function songs() {
     });
   }, [navigation]);
 
+  
+
   return (
     <SafeAreaView className="flex-1 bg-primary">
       <FlatList
         contentInsetAdjustmentBehavior="automatic"
-        data={filteredSongs}
+        data={queue}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View className="flex flex-row justify-between items-center">
-            <Link href={"/modal"} asChild>
-              <TouchableOpacity className="flex flex-row gap-3">
-                <Image
-                  source={item.coverart}
-                  className="h-16 w-16 rounded-xl"
-                  resizeMode="contain"
-                />
-                <View className="flex flex-col">
-                  <Text className="text-white text-2xl">{item.title}</Text>
-                  <Text className="text-[#727272] text-lg">{item.artist}</Text>
-                </View>
-              </TouchableOpacity>
-            </Link>
-            <TouchableOpacity className="flex flex-row">
-              <SimpleLineIcons name="options" size={24} color="white" />
-            </TouchableOpacity>
-          </View>
+        renderItem={({ item, index }) => (
+          <PlaylistItem item={item} index={index} iscurrent={currentTrack == index} />
         )}
         ItemSeparatorComponent={() => (
           <View className="border-b border-[#323232] "></View>
@@ -145,9 +133,10 @@ export default function songs() {
         ListHeaderComponent={() => (
           <View>
             <View className="flex flex-row gap-3 mb-4 justify-center item-center ">
-              <TouchableOpacity 
-              onPress={() => TrackPlayer.play()}
-               className="flex flex-1 flex-row gap-2 py-4 px-4 bg-secondary rounded-xl justify-center items-center">
+              <TouchableOpacity
+                onPress={() => TrackPlayer.play()}
+                className="flex flex-1 flex-row gap-2 py-4 px-4 bg-secondary rounded-xl justify-center items-center"
+              >
                 <FontAwesome name="play" size={30} color="#f92d47" />
                 <Text className="text-tabBarActive text-3xl">Play</Text>
               </TouchableOpacity>
